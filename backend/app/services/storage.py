@@ -143,6 +143,14 @@ def get_case(case_id: str) -> dict | None:
     return case
 
 
+def get_case_raw_text(case_id: str) -> str | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT raw_text FROM cases WHERE id = ?", (case_id,)).fetchone()
+    if row is None:
+        return None
+    return row["raw_text"]
+
+
 def seed_demo_case() -> str | None:
     existing = list_cases(limit=1)
     if existing:

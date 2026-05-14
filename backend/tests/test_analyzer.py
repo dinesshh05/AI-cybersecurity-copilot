@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+from app.services.anomaly import score_log_text
 from app.services.analyzer import analyze_log_text
+from app.services.rag import rebuild_knowledge_base, search_knowledge
 
 
 class AnalyzerTests(unittest.TestCase):
@@ -25,7 +27,24 @@ scanner found CVE-2024-3094 on package xz-utils"""
         self.assertEqual(result.severity, "low")
         self.assertLessEqual(result.risk_score, 25)
 
+    def test_rag_retrieval_returns_matches(self) -> None:
+        rebuild_knowledge_base()
+        items = search_knowledge("PowerShell command execution", limit=3)
+
+        self.assertGreaterEqual(len(items), 1)
+        self.assertTrue(any("PowerShell" in item.title for item in items))
+
+    def test_anomaly_scoring_flags_bad_log(self) -> None:
+        report = score_log_text(
+            """Failed password for invalid user admin from 185.220.101.1
+powershell.exe -enc SQBFAFgAIAA=
+malware beaconing to 203.0.113.42
+scanner found CVE-2024-3094"""
+        )
+
+        self.assertGreaterEqual(report.score, 60)
+        self.assertIn("Suspicious command execution pattern", report.signals)
+
 
 if __name__ == "__main__":
     unittest.main()
-
