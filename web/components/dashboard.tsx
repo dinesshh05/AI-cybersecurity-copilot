@@ -3,15 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   askCopilot,
+  clearStoredAuthToken,
+  fetchAuditEvents,
   fetchCaseAnomaly,
   fetchCases,
+  fetchMe,
   getWebSocketUrl,
+  getStoredAuthToken,
   lookupCve,
+  login,
   rebuildKnowledgeBase,
   searchKnowledge,
   seedDemoCase,
+  setStoredAuthToken,
   uploadLog,
   type CaseSummary,
+  type AuditEvent,
+  type AuthUser,
   type IntelCveResult,
   type AnomalyResult,
   type RetrievedChunk,
@@ -39,20 +47,47 @@ export function Dashboard() {
   const [intelCve, setIntelCve] = useState("CVE-2024-3094")
   const [intelResult, setIntelResult] = useState<IntelCveResult | null>(null)
   const [anomalyResult, setAnomalyResult] = useState<AnomalyResult | null>(null)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [loginUsername, setLoginUsername] = useState("analyst")
+  const [loginPassword, setLoginPassword] = useState("analyst123")
+  const [loginError, setLoginError] = useState("")
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const selectedIdRef = useRef<string | null>(selectedId)
-  const selectedCase = useMemo(() => cases.find((item) => item.id === selectedId) ?? cases[0] ?? null, [cases, selectedId])
-  const selectedCaseId = selectedCase?.id ?? null
+  const selectedCase = useMemo(() => cases.find((item) => item.id === selectedId) - cases[0] - null, [cases, selectedId])
+  const selectedCaseId = selectedCase?.id - null
 
   useEffect(() => {
     selectedIdRef.current = selectedId
   }, [selectedId])
 
   useEffect(() => {
-    void loadCases()
+    const token = getStoredAuthToken()
+    if (!token) {
+      setAuthLoading(false)
+      return
+    }
+    void (async () => {
+      try {
+        const user = await fetchMe()
+        if (user) {
+          setAuthUser(user)
+          setStatus(`Signed in as ${user.display_name}`)
+        } else {
+          clearStoredAuthToken()
+          setStatus("Session expired. Please sign in again.")
+        }
+      } finally {
+        setAuthLoading(false)
+      }
+    })()
   }, [])
 
   useEffect(() => {
-    const socket = new WebSocket(getWebSocketUrl())
+    if (!authUser) {
+      return
+    }
+    const socket = new WebSocket(getWebSocketUrl(getStoredAuthToken()))
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as { type: string; payload: Record<string, unknown> }
       setStream((current) => [message, ...current].slice(0, 12))
@@ -63,7 +98,19 @@ export function Dashboard() {
     socket.onopen = () => setStatus("Connected to live analysis stream")
     socket.onerror = () => setStatus("Live stream unavailable, using pull refresh")
     return () => socket.close()
-  }, [])
+  }, [authUser])
+
+  useEffect(() => {
+    if (!authUser) {
+      return
+    }
+    void loadCases()
+    if (authUser.role === "admin") {
+      void loadAuditTrail()
+    } else {
+      setAuditEvents([])
+    }
+  }, [authUser])
 
   useEffect(() => {
     if (!selectedCaseId) {
@@ -84,7 +131,7 @@ export function Dashboard() {
     try {
       const items = await fetchCases()
       setCases(items)
-      const currentSelectedId = preferredSelectedId ?? selectedIdRef.current
+      const currentSelectedId = preferredSelectedId - selectedIdRef.current
       if (items.length > 0 && (!currentSelectedId || !items.some((item) => item.id === currentSelectedId))) {
         setSelectedId(items[0].id)
       } else if (preferredSelectedId && items.some((item) => item.id === preferredSelectedId)) {
@@ -101,10 +148,55 @@ export function Dashboard() {
     }
   }
 
+  async function loadAuditTrail() {
+    try {
+      const items = await fetchAuditEvents(25)
+      setAuditEvents(items)
+    } catch {
+      setAuditEvents([])
+    }
+  }
+
+  async function handleLogin() {
+    try {
+      setLoginError("")
+      setStatus("Signing in")
+      const response = await login(loginUsername, loginPassword)
+      setStoredAuthToken(response.access_token)
+      setAuthUser(response.user)
+      setStatus(`Signed in as ${response.user.display_name}`)
+      setSelectedId(null)
+      setAuditEvents([])
+    } catch {
+      clearStoredAuthToken()
+      setAuthUser(null)
+      setLoginError("Invalid username or password")
+      setStatus("Sign in failed")
+    }
+  }
+
+  function handleLogout() {
+    clearStoredAuthToken()
+    setAuthUser(null)
+    setCases([])
+    setSelectedId(null)
+    setStream([])
+    setRagResults([])
+    setCopilotAnswer("")
+    setCopilotCitations([])
+    setIntelResult(null)
+    setAnomalyResult(null)
+    setAuditEvents([])
+    setStatus("Signed out")
+  }
+
   async function handleSeed() {
     setStatus("Loading demo incident")
     await seedDemoCase()
     await loadCases()
+    if (authUser?.role === "admin") {
+      await loadAuditTrail()
+    }
   }
 
   async function handleUpload() {
@@ -112,6 +204,9 @@ export function Dashboard() {
     const response = await uploadLog(logText, sourceName)
     await loadCases(response.case_id)
     setStatus("Analysis complete")
+    if (authUser?.role === "admin") {
+      await loadAuditTrail()
+    }
   }
 
   async function handleRebuildKnowledgeBase() {
@@ -121,6 +216,9 @@ export function Dashboard() {
       const items = await searchKnowledge(ragQuery)
       setRagResults(items)
       setStatus("Knowledge base rebuilt")
+      if (authUser?.role === "admin") {
+        await loadAuditTrail()
+      }
     } catch {
       setStatus("Knowledge base rebuild failed")
     }
@@ -132,6 +230,9 @@ export function Dashboard() {
       const items = await searchKnowledge(ragQuery)
       setRagResults(items)
       setStatus(`Found ${items.length} knowledge hit(s)`)
+      if (authUser?.role === "admin") {
+        void loadAuditTrail()
+      }
     } catch {
       setStatus("Knowledge search failed")
     }
@@ -144,6 +245,9 @@ export function Dashboard() {
       setCopilotAnswer(result.answer)
       setCopilotCitations(result.citations)
       setStatus("Copilot response ready")
+      if (authUser?.role === "admin") {
+        void loadAuditTrail()
+      }
     } catch {
       setStatus("Copilot question failed")
     }
@@ -155,12 +259,110 @@ export function Dashboard() {
       const result = await lookupCve(intelCve)
       setIntelResult(result)
       setStatus(`Loaded intel for ${intelCve}`)
+      if (authUser?.role === "admin") {
+        void loadAuditTrail()
+      }
     } catch {
       setStatus("CVE lookup failed")
     }
   }
 
-  const severityLabel = selectedCase?.severity ?? "unknown"
+  const severityLabel = selectedCase?.severity - "unknown"
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen px-4 py-6 text-text md:px-8 lg:px-12">
+        <div className="mx-auto flex min-h-[70vh] max-w-3xl items-center justify-center">
+          <div className="rounded-3xl border border-white/10 bg-panel/90 px-6 py-5 shadow-neon">
+            <div className="text-xs uppercase tracking-[0.25em] text-accent">AI SOC Copilot</div>
+            <div className="mt-3 text-2xl font-semibold">Loading secure session...</div>
+            <p className="mt-2 text-sm text-muted">Restoring your analyst workspace and validating the token.</p>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  if (!authUser) {
+    return (
+      <main className="min-h-screen px-4 py-6 text-text md:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6">
+          <section className="rounded-3xl border border-white/10 bg-panel/90 p-6 shadow-neon backdrop-blur">
+            <div className="max-w-3xl">
+              <div className="mb-3 inline-flex rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.25em] text-accent">
+                AI SOC Copilot
+              </div>
+              <h1 className="text-3xl font-semibold tracking-tight md:text-5xl">
+                Secure analyst workspace for log triage, intel enrichment, and case review.
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted md:text-base">
+                Sign in to access the dashboard, upload logs, inspect cases, review the audit trail, and use the live
+                analysis stream. The app uses JWT auth, role-based access, and audit logging.
+              </p>
+            </div>
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
+              <h2 className="text-lg font-semibold">What you get after sign in</h2>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-muted">
+                <li>• Upload logs and create cases.</li>
+                <li>• View ML anomaly scores and case summaries.</li>
+                <li>• Search the cyber knowledge base and ask the copilot.</li>
+                <li>• Look up CVEs and threat intel.</li>
+                <li>• Review the audit trail if you sign in as admin.</li>
+              </ul>
+              <p className="mt-4 rounded-2xl border border-white/10 bg-bg/70 p-4 text-sm text-muted">
+                Demo users:
+                <br />
+                <span className="text-text">analyst / analyst123</span>
+                <br />
+                <span className="text-text">senior / senior123</span>
+                <br />
+                <span className="text-text">admin / admin123</span>
+              </p>
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleLogin()
+              }}
+              className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon"
+            >
+              <h2 className="text-lg font-semibold">Sign In</h2>
+              <div className="mt-4 grid gap-4">
+                <label className="grid gap-2 text-sm text-muted">
+                  Username
+                  <input
+                    value={loginUsername}
+                    onChange={(event) => setLoginUsername(event.target.value)}
+                    className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3 text-text outline-none"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-muted">
+                  Password
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3 text-text outline-none"
+                  />
+                </label>
+                {loginError ? <p className="text-sm text-red-300">{loginError}</p> : null}
+                <button
+                  type="submit"
+                  className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110"
+                >
+                  Sign in
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen px-4 py-6 text-text md:px-8 lg:px-12">
@@ -182,6 +384,18 @@ export function Dashboard() {
             <div className="rounded-2xl border border-white/10 bg-panel2 px-4 py-3 text-sm text-muted">
               <div>Status</div>
               <div className="mt-1 font-medium text-text">{status}</div>
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted">Signed in as</div>
+                <div className="mt-1 font-medium text-text">
+                  {authUser.display_name} <span className="text-muted">({authUser.role})</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="mt-3 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-text transition hover:bg-white/10"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -341,6 +555,47 @@ export function Dashboard() {
             )}
           </div>
         </section>
+
+        {authUser.role === "admin" ? (
+          <section className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Audit Trail</h2>
+              <button
+                onClick={() => void loadAuditTrail()}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10"
+              >
+                Refresh audit trail
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {auditEvents.length === 0 ? (
+                <p className="text-sm text-muted">No audit events loaded yet.</p>
+              ) : (
+                auditEvents.map((event) => (
+                  <div key={event.id} className="rounded-2xl border border-white/10 bg-bg/70 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-text">{event.action}</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-muted">
+                          {event.actor_username} - {event.actor_role}
+                        </div>
+                      </div>
+                      <div className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-muted">
+                        {event.outcome}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">
+                      {event.resource_type ?? "resource"} {event.resource_id ? `- ${event.resource_id}` : ""}
+                    </p>
+                    <pre className="mt-2 overflow-x-auto text-xs leading-5 text-muted">
+                      {JSON.stringify(event.metadata, null, 2)}
+                    </pre>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   )
