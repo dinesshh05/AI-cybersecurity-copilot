@@ -11,6 +11,12 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - GROQ_API_BASE=https://api.groq.com/openai/v1
       - GROQ_MODEL=llama-3.1-8b-instant
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_MINUTES=480
+      - DEMO_ANALYST_PASSWORD=${DEMO_ANALYST_PASSWORD}
+      - DEMO_SENIOR_PASSWORD=${DEMO_SENIOR_PASSWORD}
+      - DEMO_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD}
     volumes:
       - ./backend:/app
       - backend_data:/data
