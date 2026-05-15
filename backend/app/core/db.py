@@ -72,6 +72,34 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id TEXT PRIMARY KEY,
+                actor_username TEXT NOT NULL,
+                actor_role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                resource_type TEXT,
+                resource_id TEXT,
+                outcome TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:
@@ -86,4 +114,3 @@ def json_dump(value: object) -> str:
 
 def json_load(value: str) -> object:
     return json.loads(value)
-

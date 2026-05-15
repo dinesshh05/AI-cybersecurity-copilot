@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
+from app.core.auth import CurrentUser, require_roles
 from app.core.events import build_event, event_bus
 from app.services.analyzer import analyze_log_text
 from app.services.storage import create_case_record
@@ -15,6 +16,7 @@ async def upload_log(
     file: UploadFile | None = File(default=None),
     log_text: str = Form(default=""),
     source_name: str = Form(default="uploaded-log"),
+    _: CurrentUser = Depends(require_roles("analyst", "senior_analyst", "admin")),
 ) -> dict:
     if file is None and not log_text.strip():
         raise HTTPException(status_code=400, detail="Provide either a file or log_text.")

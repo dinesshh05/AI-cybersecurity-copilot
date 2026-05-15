@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.auth import CurrentUser, require_roles
 from app.services.anomaly import score_log_text
 from app.services.storage import get_case, get_case_raw_text
 
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/anomalies", tags=["anomalies"])
 
 
 @router.post("/score")
-def score(log_text: str) -> dict:
+def score(log_text: str, _: CurrentUser = Depends(require_roles("analyst", "senior_analyst", "admin"))) -> dict:
     report = score_log_text(log_text)
     return {
         "score": report.score,
@@ -21,7 +22,7 @@ def score(log_text: str) -> dict:
 
 
 @router.get("/case/{case_id}")
-def score_case(case_id: str) -> dict:
+def score_case(case_id: str, _: CurrentUser = Depends(require_roles("analyst", "senior_analyst", "admin"))) -> dict:
     case = get_case(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
