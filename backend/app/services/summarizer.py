@@ -2,32 +2,50 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-import urllib.error
-import urllib.request
+
+import requests
+from requests import RequestException
 
 from app.core.config import settings
 from app.models.domain import AnalysisResult
 
 
-def _ollama_summary(prompt: str) -> str | None:
-    endpoint = f"{settings.ollama_base_url.rstrip('/')}/api/generate"
-    payload = {
-        "model": settings.ollama_model,
-        "prompt": prompt,
-        "stream": False,
-    }
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=6) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+def _groq_summary(prompt: str) -> str | None:
+    if not settings.groq_api_key:
         return None
-    return body.get("response")
+
+    endpoint = f"{settings.groq_api_base.rstrip('/')}/chat/completions"
+    payload = {
+        "model": settings.groq_model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a senior SOC analyst. Produce concise incident summaries with remediation guidance.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 0.2,
+        "max_tokens": 300,
+    }
+    try:
+        response = requests.post(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {settings.groq_api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "AI-Cybersecurity-Copilot/0.1",
+            },
+            json=payload,
+            timeout=10,
+        )
+        response.raise_for_status()
+        body = response.json()
+        return body["choices"][0]["message"]["content"].strip()
+    except (RequestException, ValueError, KeyError, IndexError, TypeError):
+        return None
 
 
 def build_summary(case_title: str, analysis: AnalysisResult) -> dict:
@@ -43,12 +61,12 @@ Reasoning: {analysis.reasoning}
 Indicators: {json.dumps([asdict(indicator) for indicator in analysis.indicators], ensure_ascii=False)}
 Remediation suggestions: {json.dumps(analysis.remediation, ensure_ascii=False)}
 """
-    llm_summary = _ollama_summary(prompt)
+    llm_summary = _groq_summary(prompt)
     if llm_summary:
         return {
             "summary": llm_summary.strip(),
-            "model": settings.ollama_model,
-            "mode": "ollama",
+            "model": settings.groq_model,
+            "mode": "groq",
         }
 
     fallback = (

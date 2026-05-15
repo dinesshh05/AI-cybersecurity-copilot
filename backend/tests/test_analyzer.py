@@ -44,6 +44,20 @@ scanner found CVE-2024-3094"""
 
         self.assertGreaterEqual(report.score, 60)
         self.assertIn("Suspicious command execution pattern", report.signals)
+        self.assertTrue(report.model_notes)
+
+    def test_anomaly_scoring_keeps_benign_log_lower_than_malicious(self) -> None:
+        benign = score_log_text("""Jan 14 08:01:12 auth host sshd[2201]: Accepted publickey for analyst from 10.0.0.15 port 55122 ssh2
+Jan 14 08:02:03 web nginx[901]: GET /health 200 12ms from 10.0.0.25""")
+        malicious = score_log_text(
+            """Failed password for invalid user admin from 185.220.101.1
+powershell.exe -enc SQBFAFgAIAA=
+malware beaconing to 203.0.113.42
+scanner found CVE-2024-3094"""
+        )
+
+        self.assertLess(benign.score, malicious.score)
+        self.assertEqual(benign.severity, "low")
 
 
 if __name__ == "__main__":

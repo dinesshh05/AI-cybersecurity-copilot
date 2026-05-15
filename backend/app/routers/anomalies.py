@@ -16,6 +16,7 @@ def score(log_text: str) -> dict:
         "severity": report.severity,
         "signals": report.signals,
         "features": report.features,
+        "model_notes": report.model_notes,
     }
 
 
@@ -33,4 +34,5 @@ def score_case(case_id: str) -> dict:
         "severity": report.severity,
         "signals": report.signals,
         "features": report.features,
+        "model_notes": report.model_notes,
     }
