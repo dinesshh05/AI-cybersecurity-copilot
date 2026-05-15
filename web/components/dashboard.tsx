@@ -41,6 +41,7 @@ export function Dashboard() {
   const [anomalyResult, setAnomalyResult] = useState<AnomalyResult | null>(null)
   const selectedIdRef = useRef<string | null>(selectedId)
   const selectedCase = useMemo(() => cases.find((item) => item.id === selectedId) ?? cases[0] ?? null, [cases, selectedId])
+  const selectedCaseId = selectedCase?.id ?? null
 
   useEffect(() => {
     selectedIdRef.current = selectedId
@@ -65,19 +66,19 @@ export function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!selectedCase) {
+    if (!selectedCaseId) {
       setAnomalyResult(null)
       return
     }
     void (async () => {
       try {
-        const result = await fetchCaseAnomaly(selectedCase.id)
+        const result = await fetchCaseAnomaly(selectedCaseId)
         setAnomalyResult(result)
       } catch {
         setAnomalyResult(null)
       }
     })()
-  }, [selectedCase?.id])
+  }, [selectedCaseId])
 
   async function loadCases(preferredSelectedId: string | null = null) {
     try {
@@ -174,8 +175,8 @@ export function Dashboard() {
                 Log upload, enrichment, and incident summary in one workflow.
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-muted md:text-base">
-                This vertical slice turns raw telemetry into a case, runs heuristic analysis, streams the result live,
-                and produces a grounded incident summary with an Ollama fallback.
+                This vertical slice turns raw telemetry into a case, runs ML-backed anomaly scoring, streams the result live,
+                and produces a grounded incident summary with optional Groq generation.
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-panel2 px-4 py-3 text-sm text-muted">
@@ -309,6 +310,9 @@ export function Dashboard() {
                           <li key={signal}>- {signal}</li>
                         ))}
                       </ul>
+                      {anomalyResult.model_notes ? (
+                        <p className="mt-3 text-xs leading-5 text-muted">{anomalyResult.model_notes}</p>
+                      ) : null}
                     </>
                   ) : (
                     <p className="mt-2 text-sm text-muted">No anomaly score loaded.</p>
@@ -337,96 +341,6 @@ export function Dashboard() {
             )}
           </div>
         </section>
-
-        <section className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
-            <h2 className="text-lg font-semibold">Knowledge Base</h2>
-            <p className="mt-2 text-sm text-muted">Search the free RAG corpus backed by MITRE ATT&CK notes and CISA KEV data.</p>
-            <div className="mt-4 grid gap-3">
-              <input
-                value={ragQuery}
-                onChange={(event) => setRagQuery(event.target.value)}
-                className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3 text-sm text-text outline-none"
-              />
-              <div className="flex flex-wrap gap-2">
-                <button onClick={handleSearchKnowledge} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-slate-950">
-                  Search
-                </button>
-                <button onClick={handleRebuildKnowledgeBase} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
-                  Rebuild
-                </button>
-              </div>
-              <div className="space-y-3">
-                {ragResults.length === 0 ? (
-                  <p className="text-sm text-muted">No retrieval results yet.</p>
-                ) : (
-                  ragResults.map((item) => (
-                    <div key={item.doc_id} className="rounded-2xl border border-white/10 bg-bg/70 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold">{item.title}</div>
-                        <div className="text-xs uppercase tracking-[0.2em] text-accent">{item.source}</div>
-                      </div>
-                      <p className="mt-2 text-sm text-muted">{item.text}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
-            <h2 className="text-lg font-semibold">Copilot Q&A</h2>
-            <p className="mt-2 text-sm text-muted">Ask a grounded cybersecurity question and inspect citations.</p>
-            <div className="mt-4 grid gap-3">
-              <textarea
-                value={copilotQuestion}
-                onChange={(event) => setCopilotQuestion(event.target.value)}
-                rows={5}
-                className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3 text-sm text-text outline-none"
-              />
-              <button onClick={handleAskCopilot} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-slate-950">
-                Ask Copilot
-              </button>
-              {copilotAnswer ? (
-                <div className="rounded-2xl border border-white/10 bg-bg/70 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted">Answer</div>
-                  <p className="mt-2 text-sm leading-6 text-text">{copilotAnswer}</p>
-                  <div className="mt-3 text-xs uppercase tracking-[0.2em] text-muted">Citations</div>
-                  <pre className="mt-2 overflow-x-auto text-xs text-muted">{JSON.stringify(copilotCitations, null, 2)}</pre>
-                </div>
-              ) : (
-                <p className="text-sm text-muted">No answer yet.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
-            <h2 className="text-lg font-semibold">Threat Intel</h2>
-            <p className="mt-2 text-sm text-muted">Lookup a CVE with the free NVD-backed endpoint.</p>
-            <div className="mt-4 grid gap-3">
-              <input
-                value={intelCve}
-                onChange={(event) => setIntelCve(event.target.value)}
-                className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3 text-sm text-text outline-none"
-              />
-              <button onClick={handleLookupCve} className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-slate-950">
-                Lookup CVE
-              </button>
-              {intelResult ? (
-                <div className="rounded-2xl border border-white/10 bg-bg/70 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold">{intelResult.title}</div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-accent">{intelResult.severity}</div>
-                  </div>
-                  <p className="mt-2 text-sm text-muted">{intelResult.summary}</p>
-                  <pre className="mt-3 overflow-x-auto text-xs text-muted">{JSON.stringify(intelResult.references, null, 2)}</pre>
-                </div>
-              ) : (
-                <p className="text-sm text-muted">No intel loaded yet.</p>
-              )}
-            </div>
-          </div>
-        </section>
       </div>
     </main>
   )
@@ -434,18 +348,18 @@ export function Dashboard() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-panel/90 p-5 shadow-neon">
-      <div className="text-xs uppercase tracking-[0.25em] text-muted">{label}</div>
-      <div className="mt-3 text-3xl font-semibold">{value}</div>
+    <div className="rounded-3xl border border-white/10 bg-panel/90 p-4 shadow-neon">
+      <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-text">{value}</div>
     </div>
   )
 }
 
 function DetailPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-bg/70 px-4 py-3">
+    <div className="rounded-2xl border border-white/10 bg-bg/70 p-3">
       <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
-      <div className="mt-1 font-semibold">{value}</div>
+      <div className="mt-1 text-sm font-semibold text-text">{value}</div>
     </div>
   )
 }

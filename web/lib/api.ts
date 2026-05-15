@@ -53,6 +53,7 @@ export type AnomalyResult = {
   severity: string
   signals: string[]
   features: Record<string, number>
+  model_notes?: string
 }
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
