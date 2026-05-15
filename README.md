@@ -8,11 +8,11 @@ It combines:
 - Next.js dashboard
 - live WebSocket updates
 - heuristic log analysis
+- ML anomaly scoring
 - case management
-- anomaly scoring
 - threat-intel enrichment
-- retrieval-backed cybersecurity Q&A
-- local-first LLM-compatible summarization
+- semantic retrieval over cyber knowledge
+- optional Groq-backed incident summaries
 
 ## What Is Working Right Now
 
@@ -21,9 +21,10 @@ The current build already supports an end-to-end SOC-style workflow:
 1. Upload or seed a security log.
 2. Analyze the log on the backend.
 3. Create a case in storage.
-4. Generate an incident summary.
-5. Push a live `analysis.completed` event to the dashboard.
-6. Review the case, anomaly score, intel lookup, and retrieval results in the UI.
+4. Score the log with an ML anomaly baseline.
+5. Generate an incident summary.
+6. Push a live `analysis.completed` event to the dashboard.
+7. Review the case, anomaly score, intel lookup, and retrieval results in the UI.
 
 ### Working Features
 
@@ -32,9 +33,10 @@ The current build already supports an end-to-end SOC-style workflow:
 - case list and case detail views
 - live event stream over WebSocket
 - heuristic detection of suspicious activity
-- anomaly scoring
-- free RAG search over cybersecurity knowledge
+- ML-backed anomaly scoring with deterministic fallback
+- semantic retrieval over cybersecurity knowledge
 - NVD-backed CVE lookup
+- optional Groq incident summaries
 - retrieval-backed copilot Q&A
 
 ## Free Stack Choices
@@ -45,11 +47,18 @@ This project intentionally uses free or open-source tooling:
 - Next.js for the frontend
 - Tailwind CSS for styling
 - SQLite for the current baseline persistence layer
-- ChromaDB or a local fallback vector store for retrieval
-- SentenceTransformers or a local fallback embedding path
-- Ollama for local model inference
+- local fallback vector search for retrieval
+- local fallback embedding path for retrieval
+- Groq for the optional LLM summary path
+- scikit-learn for ML anomaly detection
 - NVD, CISA KEV, and MITRE ATT&CK as public intel sources
 - Redis later for job coordination and event fan-out
+
+The default install is intentionally lightweight on Windows:
+
+- no native vector database build is required
+- no sentence-transformer download is required to start the app
+- the heavier retrieval stack can be added later as an optional upgrade
 
 ## Repository Layout
 
@@ -88,6 +97,10 @@ cd "E:\ai-cybersecurity-copilot\backend"
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
+
+If you want AI-generated summaries instead of the deterministic fallback, set `GROQ_API_KEY` in your environment or `.env` file first.
+The backend automatically loads `E:\ai-cybersecurity-copilot\.env` and `E:\ai-cybersecurity-copilot\backend\.env` if they exist.
+The current install path only needs the lightweight dependencies in `backend/requirements.txt`.
 
 ### 3. Start the frontend
 
@@ -141,10 +154,11 @@ Completed:
 
 In progress:
 
-- better RAG over cyber knowledge
+- better semantic retrieval over cyber knowledge
 - MITRE ATT&CK and CISA KEV enrichment
 - CVE lookup and citation support
 - grounded security Q&A
+- ML anomaly detection improvements
 
 ### Milestone 3: Security Product Hardening
 
@@ -201,6 +215,7 @@ It demonstrates:
 - The backend root endpoint returns JSON by design.
 - The correct health endpoint is `/api/v1/health`, not `/health`.
 - The project uses free and open-source tools where possible.
+- The backend ships with built-in fallback embeddings and vector search so it can run without native build tooling on Windows.
 - The current codebase is intentionally designed for iterative expansion.
 
 ## License
