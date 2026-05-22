@@ -218,6 +218,43 @@ All application routes are mounted under `/api/v1`.
 - MITRE ATT&CK and CISA KEV enrichment
 - CVE lookup and citation support
 - grounded security Q&A
+
+## Deployment
+
+This repo deploys most cleanly as:
+
+- backend API on Render
+- frontend dashboard on Vercel
+
+That split matches the app shape well:
+
+- the backend keeps WebSocket support and SQLite/vector data on a long-running service
+- the frontend stays on a platform with first-class Next.js support
+
+### Deploy the backend on Render
+
+The repo now includes a `render.yaml` blueprint for the API service.
+
+Important environment values:
+
+- `JWT_SECRET`
+- `GROQ_API_KEY` if you want live summaries
+- `CORS_ORIGINS` set to your deployed frontend URL, for example `https://your-app.vercel.app`
+
+The backend also expects persistent storage for:
+
+- `DATABASE_PATH=/var/data/copilot.sqlite3`
+- `VECTOR_DIR=/var/data/vectorstore`
+
+Because this app stores SQLite and vector data on disk, use a Render web service with a persistent disk enabled.
+
+### Deploy the frontend on Vercel
+
+Deploy the `web/` directory as a Next.js project and set:
+
+- `NEXT_PUBLIC_API_BASE_URL=https://your-render-backend.onrender.com`
+
+Once the Vercel URL is known, add it to the Render backend as `CORS_ORIGINS`.
 - ML anomaly detection improvements
 
 #### Milestone 3: Security Product Hardening

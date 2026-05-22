@@ -11,6 +11,13 @@ load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
 load_dotenv(dotenv_path=PROJECT_ROOT / "backend" / ".env", override=False)
 
 
+def _parse_csv_list(value: str | None, fallback: list[str]) -> list[str]:
+    if not value:
+        return fallback
+    parsed = [item.strip() for item in value.split(",") if item.strip()]
+    return parsed or fallback
+
+
 class Settings:
     project_root = PROJECT_ROOT
     data_root = project_root / "backend_data"
@@ -31,7 +38,10 @@ class Settings:
     cisa_kev_url = os.getenv("CISA_KEV_URL", "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json")
     mitre_attack_url = os.getenv("MITRE_ATTACK_URL", "https://attack.mitre.org/")
     api_prefix = "/api/v1"
-    cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins = _parse_csv_list(
+        os.getenv("CORS_ORIGINS"),
+        ["http://localhost:3000", "http://127.0.0.1:3000"],
+    )
 
 
 settings = Settings()

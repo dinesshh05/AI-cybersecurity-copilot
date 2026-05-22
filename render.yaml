@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: ai-cybersecurity-copilot-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DATABASE_PATH
+        value: /var/data/copilot.sqlite3
+      - key: VECTOR_DIR
+        value: /var/data/vectorstore
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_MINUTES
+        value: "480"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GROQ_API_BASE
+        value: https://api.groq.com/openai/v1
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+    disk:
+      name: copilot-data
+      mountPath: /var/data
+      sizeGB: 1
